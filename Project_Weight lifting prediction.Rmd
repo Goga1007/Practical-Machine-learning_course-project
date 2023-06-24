@@ -1,0 +1,135 @@
+---
+title: "Machine learning_Prediction using Weigth Lifting Exercise"
+author: "Goga"
+date: "2023-06-20"
+output:
+  html_document: default
+  word_document: default
+---
+
+## Predictions using the Weight Lifting Exercises Dataset
+
+[GitHub link for Project in HTML: ]<http://bit.ly/2c8Mbti>  
+
+
+## 1 - Summary
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement ??? a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. 
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+This project has the purpose to predict the manner in which users perform the exercises. There are 5 possible results, reported in the `classe` variable:
+
+* A: exactly according to the specification
+* B: throwing the elbows to the front
+* C: lifting the dumbbell only halfway
+* D: lowering the dumbbell only halfway
+* E: throwing the hips to the front
+
+[Data provided by curtesy of: ]<http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>
+
+The data for the project is available at:
+
+[Training Dataset:  ]<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv> 
+
+[Testing Dataset:  ]<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+The objective of this project is to predict the `classe` based on data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+## 2 - Libraries
+
+library(lattice); 
+library(ggplot2); 
+library(plyr);
+library(caret); 
+install.packages("randomForest")
+install.packages("tree")
+install.packages("rattle")
+install.packages("rpart")
+install.packages("corrplot")
+set.seed(6266) # set contact random seed
+
+### Read the Data
+After downloading the data from the data source, we can read the two csv files into two data frames.  
+```{r, cache = T}
+training <- read.csv("C:/Users/gogab/Documents/Coursera/Machine learning/Course project/pml-training.csv")
+testing <- read.csv("C:/Users/gogab/Documents/Coursera/Machine learning/Course project/pml-testing.csv")
+dim(training)
+dim(testing)
+```
+
+The training data set contains 19622 observations and 160 variables, while the testing data set contains 20 observations and 160 variables. The "classe" variable in the training set is the outcome to predict. 
+
+### Clean the data
+In this step, we will clean the data and get rid of observations with missing values as well as some meaningless variables.
+```{r, cache = T}
+sum(complete.cases(training))
+```
+
+First, we remove columns that contain NA missing values.
+```{r, cache = T}
+training <- training[, colSums(is.na(training)) == 0] 
+testing <- testing[, colSums(is.na(testing)) == 0] 
+```  
+Next, we get rid of some columns that do not contribute much to the accelerometer measurements.
+```{r, cache = T}
+classe <- training$classe
+trainRemove <- grepl("^X|timestamp|window", names(training))
+training <- training[, !trainRemove]
+trainCleaned <- training[, sapply(training, is.numeric)]
+trainCleaned$classe <- classe
+testRemove <- grepl("^X|timestamp|window", names(testing))
+testing <- testing[, !testRemove]
+testCleaned <- testing[, sapply(testing, is.numeric)]
+```
+```{r, cache = T}
+dim(trainCleaned)
+dim(testCleaned)
+```
+The cleaned training data set contains 19622 observations and 53 variables, while the testing data set contains 20 observations and 53 variables. The "classe" variable is still in the cleaned training set.
+
+### Slice the data
+Then, we can split the cleaned training set into a pure training data set (70%) and a validation data set (30%). We will use the validation data set to conduct cross validation in future steps.  
+```{r, cache = T}
+set.seed(22519)  ##For reproducibile purpose
+inTrain <- caret::createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+```
+```{r, cache = T}
+dim(trainData)
+dim(testData)
+```
+We split data into training set and test set. Now we have 13737 observations and 53 variables in training set and 5885 observations and 53 variables in testing set.
+
+## Data Modeling
+We fit a predictive model for activity recognition using **Random Forest** algorithm because it automatically selects important variables and is robust to correlated covariates & outliers in general. We will use **5-fold cross validation** when applying the algorithm.  
+```{r, cache = T}
+controlRf <- caret::trainControl(method="cv", 5)
+modelRf <- caret::train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=250)
+modelRf
+```
+
+```{r, cache = T}
+# create a confusion matrix for the model on the sub-testing set to see how accurate the prediction is
+ConMatrix <- confusionMatrix(table(testData$classe, predict(modelRf, testData)))
+print(ConMatrix)
+```
+### Step 4: Prediction
+```{r, cache = T}
+# predict
+pred<-predict(modelRf, testing)
+pred
+```
+
+### Step 5: Check importance of features
+```{r, cache = T}
+importance <- varImp(modelRf, scale=FALSE)
+plot(importance)
+```
+## Appendix: Figures
+
+Decision Tree Visualization
+```{r, cache = T}
+treeModel <-rpart::rpart(classe ~ ., data=trainData, method="class")
+rpart.plot::prp(treeModel) # fast plot
+```
